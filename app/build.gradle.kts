@@ -46,7 +46,7 @@ android {
 
 chaquopy {
     defaultConfig {
-        version = "3.8"
+        version = "3.11"
         pip {
             install("requests")
             install("tldextract")
