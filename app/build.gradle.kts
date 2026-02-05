@@ -20,14 +20,14 @@ android {
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
         }
+    }
 
-        python {
-            version = "3.11"
-            pip {
-                install("requests")
-                install("beautifulsoup4")
-                install("lxml")
-            }
+    python {
+        version = "3.11"
+        pip {
+            install("requests")
+            install("beautifulsoup4")
+            install("lxml")
         }
     }
 
