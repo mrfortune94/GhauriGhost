@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  */
 object MetasploitRunner {
     
-    // MSF RPC Configuration
+    // MSF RPC Configuration (default port 55553 for msfrpcd JSON-RPC)
     private var rpcHost = "127.0.0.1"
     private var rpcPort = 55553
     private var rpcUser = "msf"
@@ -515,7 +515,7 @@ object MetasploitRunner {
                 .build()
             
             httpClient.newCall(request).execute().use { response ->
-                response.code != 0
+                response.isSuccessful || response.code in 200..499
             }
         } catch (e: Exception) {
             false

@@ -3,13 +3,13 @@ package com.ghaurighost.app
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -20,10 +20,12 @@ import java.util.regex.Pattern
  */
 object EndpointScanner {
     
-    // Configuration
+    // Configuration: MAX_DEPTH limits recursion to avoid excessive crawling and detection
+    // MAX_PAGES prevents memory issues and excessive scanning time on large sites
     internal const val MAX_DEPTH = 3
     internal const val MAX_PAGES = 100
     private const val TIMEOUT_SECONDS = 30L
+    internal const val MAX_SITEMAP_DEPTH = 5 // Prevent infinite sitemap recursion
     
     internal val httpClient = OkHttpClient.Builder()
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -138,7 +140,7 @@ private suspend fun crawlPage(
         extractMetaLinks(doc, baseUrl, endpoints)
         
         // Add delay to avoid rate limiting
-        kotlinx.coroutines.delay(AnonymityHelper.randomDelay(500, 1500))
+        delay(AnonymityHelper.randomDelay(500, 1500))
         
         // Recursively crawl discovered links (only same domain)
         if (depth < EndpointScanner.MAX_DEPTH) {
@@ -351,6 +353,7 @@ private suspend fun discoverFromRobotsTxt(baseUrl: String, endpoints: MutableSet
             .execute()
             .body()
         
+        val visitedSitemaps = mutableSetOf<String>()
         doc.lines().forEach { line ->
             val trimmed = line.trim()
             if (trimmed.startsWith("Disallow:") || trimmed.startsWith("Allow:")) {
@@ -360,7 +363,7 @@ private suspend fun discoverFromRobotsTxt(baseUrl: String, endpoints: MutableSet
                 }
             } else if (trimmed.startsWith("Sitemap:")) {
                 val sitemapUrl = trimmed.substringAfter(":").trim()
-                discoverFromSitemapUrl(sitemapUrl, endpoints)
+                discoverFromSitemapUrl(sitemapUrl, endpoints, visitedSitemaps, 0)
             }
         }
     } catch (e: Exception) {
@@ -379,15 +382,25 @@ private suspend fun discoverFromSitemap(baseUrl: String, endpoints: MutableSet<S
         "$baseUrl/sitemaps.xml"
     )
     
+    val visitedSitemaps = mutableSetOf<String>()
     sitemapUrls.forEach { url ->
-        discoverFromSitemapUrl(url, endpoints)
+        discoverFromSitemapUrl(url, endpoints, visitedSitemaps, 0)
     }
 }
 
 /**
- * Parse a sitemap URL and extract endpoints.
+ * Parse a sitemap URL and extract endpoints with depth limiting.
  */
-private suspend fun discoverFromSitemapUrl(url: String, endpoints: MutableSet<String>) {
+private suspend fun discoverFromSitemapUrl(
+    url: String, 
+    endpoints: MutableSet<String>, 
+    visitedSitemaps: MutableSet<String>,
+    depth: Int
+) {
+    // Prevent circular references and excessive depth
+    if (depth > EndpointScanner.MAX_SITEMAP_DEPTH) return
+    if (!visitedSitemaps.add(url)) return
+    
     try {
         val doc = Jsoup.connect(url)
             .userAgent(AnonymityHelper.getRandomUserAgent())
@@ -403,11 +416,11 @@ private suspend fun discoverFromSitemapUrl(url: String, endpoints: MutableSet<St
             }
         }
         
-        // Handle sitemap index files
+        // Handle sitemap index files with depth tracking
         doc.select("sitemap loc").forEach { loc ->
             val nestedSitemap = loc.text().trim()
             if (nestedSitemap.isNotBlank() && nestedSitemap != url) {
-                discoverFromSitemapUrl(nestedSitemap, endpoints)
+                discoverFromSitemapUrl(nestedSitemap, endpoints, visitedSitemaps, depth + 1)
             }
         }
     } catch (e: Exception) {
