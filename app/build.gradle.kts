@@ -66,8 +66,15 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    
+    // Material icons extended for additional icons
+    implementation("androidx.compose.material:material-icons-extended")
 
+    // Networking & parsing
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    
+    // JSON parsing for Metasploit RPC
+    implementation("org.json:json:20231013")
 }
