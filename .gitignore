@@ -6,3 +6,20 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+# Ignore large temp files and downloads
+*.zip
+temp-*
+.gradle
+build/
+app/build/
+# Ignore large temp files, Gradle cache, builds, downloads
+*.zip
+temp-*
+.gradle
+build/
+app/build/
+local.properties
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
