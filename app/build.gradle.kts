@@ -46,11 +46,12 @@ android {
 
 chaquopy {
     defaultConfig {
-        version = "3.11"
+        version = "3.8"
         pip {
             install("requests")
-            install("beautifulsoup4")
-            install("lxml")
+            install("tldextract")
+            install("colorama")
+            install("chardet")
         }
     }
 }
@@ -68,6 +69,5 @@ dependencies {
 
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.chaquo.python:chaquopy:15.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
