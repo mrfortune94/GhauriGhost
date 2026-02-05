@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.chaquo.python")
 }
 
@@ -19,15 +20,6 @@ android {
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-        }
-    }
-
-    python {
-        version = "3.11"
-        pip {
-            install("requests")
-            install("beautifulsoup4")
-            install("lxml")
         }
     }
 
@@ -50,9 +42,17 @@ android {
     buildFeatures {
         compose = true
     }
+}
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pip {
+            install("requests")
+            install("tldextract")
+            install("colorama")
+            install("chardet")
+        }
     }
 }
 
@@ -69,6 +69,5 @@ dependencies {
 
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.chaquo.python:chaquopy:15.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
