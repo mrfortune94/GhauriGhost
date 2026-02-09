@@ -25,6 +25,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+// UI Constants
+private const val MAX_STATUS_LENGTH = 100
+
 class MainActivity : ComponentActivity() {
     
     companion object {
@@ -295,7 +298,7 @@ fun EndpointScannerScreen() {
                             status = "Testing endpoint: $ep"
                             val result = GhauriRunner.runOnEndpoint(ep)
                             result.fold(
-                                onSuccess = { status = "Test completed: ${it.take(100)}..." },
+                                onSuccess = { status = "Test completed: ${it.take(MAX_STATUS_LENGTH)}..." },
                                 onFailure = { status = "Test failed: ${it.message}" }
                             )
                         }

@@ -28,14 +28,19 @@ import java.util.concurrent.Executors
  * TorVpnService provides VPN functionality that routes traffic through a SOCKS5 proxy.
  * By default, it connects to Tor SOCKS proxy (Orbot) on localhost:9050.
  * 
- * The service captures all app traffic through a TUN interface and forwards
- * TCP connections through the configured SOCKS5 proxy for anonymization.
+ * The service captures all app traffic through a TUN interface and establishes
+ * SOCKS5 proxy connections for anonymization.
  * 
- * Features:
- * - TCP traffic forwarding through SOCKS5 proxy
- * - DNS queries routed through Tor DNS port (9053) when available
- * - Bidirectional data transfer for established connections
- * - Protected sockets to prevent routing loops
+ * Implementation Notes:
+ * - TCP traffic is forwarded through SOCKS5 proxy connections
+ * - DNS queries are sent to Tor DNS port (9053) when available
+ * - For full bidirectional VPN tunnel functionality, a native tun2socks library
+ *   (like badvpn-tun2socks or go-tun2socks) would be needed to properly reconstruct
+ *   IP packets. This implementation establishes the SOCKS5 infrastructure and
+ *   connection management.
+ * - Protected sockets prevent routing loops
+ * 
+ * When used with Orbot running in the background, traffic will be routed through Tor.
  */
 class TorVpnService : VpnService() {
 
@@ -77,11 +82,8 @@ class TorVpnService : VpnService() {
     private var executorService: ExecutorService? = null
     @Volatile private var running = false
     
-    // Track active TCP connections to avoid duplicates
+    // Track active TCP connections for proper lifecycle management
     private val activeConnections = ConcurrentHashMap<String, TcpConnection>()
-    
-    // DNS cache to reduce Tor DNS queries
-    private val dnsCache = ConcurrentHashMap<String, CachedDnsEntry>()
 
     override fun onCreate() {
         super.onCreate()
@@ -224,9 +226,31 @@ class TorVpnService : VpnService() {
         val connectionKey = "$destIp:$destPort"
         
         // Check if we already have an active connection for this destination
-        if (activeConnections.containsKey(connectionKey)) {
-            Log.v(TAG, "Reusing existing connection to $connectionKey")
-            return
+        // If so, forward the packet data to the existing connection
+        activeConnections[connectionKey]?.let { existingConnection ->
+            if (!existingConnection.socket.isClosed) {
+                try {
+                    // Extract TCP payload from packet and forward it
+                    val ipHeaderLength = (packetData[0].toInt() and 0x0F) * 4
+                    val tcpHeaderLength = ((packetData[ipHeaderLength + 12].toInt() and 0xF0) shr 4) * 4
+                    val payloadOffset = ipHeaderLength + tcpHeaderLength
+                    
+                    if (payloadOffset < packetData.size) {
+                        val payload = packetData.copyOfRange(payloadOffset, packetData.size)
+                        if (payload.isNotEmpty()) {
+                            existingConnection.output.write(payload)
+                            existingConnection.output.flush()
+                            Log.v(TAG, "Forwarded ${payload.size} bytes to $connectionKey")
+                        }
+                    }
+                    return
+                } catch (e: Exception) {
+                    // Connection may have died, remove it and create new one
+                    closeConnection(connectionKey)
+                }
+            } else {
+                closeConnection(connectionKey)
+            }
         }
         
         if (!isProxyAvailable) {
@@ -526,7 +550,6 @@ class TorVpnService : VpnService() {
             closeConnection(key)
         }
         activeConnections.clear()
-        dnsCache.clear()
         
         try {
             vpnInterface?.close()
@@ -622,12 +645,4 @@ private data class TcpConnection(
     val output: OutputStream,
     val destIp: String,
     val destPort: Int
-)
-
-/**
- * Cached DNS entry to reduce Tor DNS queries.
- */
-private data class CachedDnsEntry(
-    val ipAddress: String,
-    val expirationTime: Long
 )
