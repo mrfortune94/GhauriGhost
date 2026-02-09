@@ -264,7 +264,7 @@ fun EndpointScannerScreen() {
                         selectedEndpoints = if (ep in selectedEndpoints) 
                             selectedEndpoints - ep else selectedEndpoints + ep
                     },
-                    onTest = { GhauriRunner.runOnEndpoint(ep) }
+                    onTest = { scope.launch { GhauriRunner.runOnEndpoint(ep) } }
                 )
             }
         }
@@ -278,8 +278,10 @@ fun EndpointScannerScreen() {
         ) {
             Button(
                 onClick = {
-                    val toTest = if (selectedEndpoints.isNotEmpty()) selectedEndpoints.toList() else endpoints
-                    GhauriRunner.runOnEndpoints(toTest)
+                    scope.launch {
+                        val toTest = if (selectedEndpoints.isNotEmpty()) selectedEndpoints.toList() else endpoints
+                        GhauriRunner.runOnEndpoints(toTest)
+                    }
                 },
                 modifier = Modifier.weight(1f),
                 enabled = endpoints.isNotEmpty()
@@ -701,22 +703,24 @@ fun GhauriScreen() {
                         appendLine("[*] Testing connection to target...")
                     }
                     
-                    // Run the actual Ghauri scan
+                    // Run the actual Ghauri scan with the full built command
                     try {
-                        val urlToTest = if (targetUrl.isNotBlank()) targetUrl else {
-                            val urlMatch = Regex("-u\\s+(\\S+)").find(command)
-                            urlMatch?.groupValues?.get(1) ?: ""
-                        }
+                        val hasUrl = finalCommand.contains("-u ") || finalCommand.contains("--url ")
                         
-                        if (urlToTest.isNotBlank()) {
-                            terminalOutput += "\n[*] Target: $urlToTest"
+                        if (hasUrl) {
                             terminalOutput += "\n[*] Initiating SQL injection tests..."
                             terminalOutput += "\n"
                             
-                            GhauriRunner.runOnEndpoint(urlToTest)
-                            
-                            terminalOutput += "\n[+] Scan completed successfully"
-                            terminalOutput += "\n[*] Check detailed results in output directory"
+                            val result = GhauriRunner.runWithCommand(finalCommand)
+                            result.fold(
+                                onSuccess = { output ->
+                                    terminalOutput += "\n$output"
+                                    terminalOutput += "\n\n[+] Scan completed successfully"
+                                },
+                                onFailure = { error ->
+                                    terminalOutput += "\n[-] Error during scan: ${error.message}"
+                                }
+                            )
                         } else {
                             terminalOutput += "\n[-] Error: No target URL specified"
                             terminalOutput += "\n[*] Use -u option or enter URL above"

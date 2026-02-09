@@ -12,21 +12,26 @@ object GhauriRunner {
     
     /**
      * Run Ghauri on multiple endpoints with default options.
+     * Returns a list of results for each endpoint.
      */
-    fun runOnEndpoints(endpoints: List<String>) {
+    suspend fun runOnEndpoints(endpoints: List<String>): List<Result<String>> = withContext(Dispatchers.IO) {
         val py = Python.getInstance()
-        val module = py.getModule("ghauri") // assumes ghauri in assets or pip
-        endpoints.forEach { url ->
-            val result = module.callAttr("main", arrayOf("--url", url, "--batch", "--level=3"))
-            // TODO: show result in UI
+        val module = py.getModule("ghauri")
+        endpoints.map { url ->
+            try {
+                val result = module.callAttr("main", arrayOf("--url", url, "--batch", "--level=3"))
+                Result.success(result?.toString() ?: "Scan completed for $url")
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 
     /**
      * Run Ghauri on a single endpoint with default options.
      */
-    fun runOnEndpoint(url: String) {
-        runOnEndpoints(listOf(url))
+    suspend fun runOnEndpoint(url: String): Result<String> {
+        return runOnEndpoints(listOf(url)).first()
     }
     
     /**
