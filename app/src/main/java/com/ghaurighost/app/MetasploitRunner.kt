@@ -556,6 +556,8 @@ object MetasploitRunner {
                 val error = json.opt("error")
                 if (error is JSONObject) {
                     throw Exception(error.optString("message", "RPC error"))
+                } else {
+                    throw Exception("RPC error: $error")
                 }
             }
             return json.optJSONObject("result") ?: json
