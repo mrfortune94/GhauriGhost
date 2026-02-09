@@ -548,7 +548,19 @@ object MetasploitRunner {
         
         httpClient.newCall(request).execute().use { response ->
             val body = response.body?.string() ?: "{}"
-            return JSONObject(body)
+            val json = JSONObject(body)
+            
+            // JSON-RPC 2.0 wraps the actual result under a "result" key and
+            // errors under an "error" key. Unwrap so callers get the payload directly.
+            if (json.has("error") && !json.isNull("error")) {
+                val error = json.opt("error")
+                if (error is JSONObject) {
+                    throw Exception(error.optString("message", "RPC error"))
+                } else {
+                    throw Exception("RPC error: $error")
+                }
+            }
+            return json.optJSONObject("result") ?: json
         }
     }
 }
