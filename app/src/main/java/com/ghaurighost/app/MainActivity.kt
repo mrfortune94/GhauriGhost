@@ -314,11 +314,13 @@ fun EndpointScannerScreen() {
             Button(
                 onClick = {
                     scope.launch {
+                        isScanning = true
                         val toTest = if (selectedEndpoints.isNotEmpty()) selectedEndpoints.toList() else endpoints
                         status = "Running SQL injection tests on ${toTest.size} endpoint(s)..."
                         val results = GhauriRunner.runOnEndpoints(toTest)
                         val successCount = results.count { it.isSuccess }
                         status = "Completed: $successCount/${results.size} scans successful"
+                        isScanning = false
                     }
                 },
                 modifier = Modifier.weight(1f),
@@ -332,6 +334,7 @@ fun EndpointScannerScreen() {
             Button(
                 onClick = {
                     scope.launch {
+                        isScanning = true
                         status = "Running Metasploit auto-exploit..."
                         val result = MetasploitRunner.autoExploit(url)
                         result.fold(
@@ -342,6 +345,7 @@ fun EndpointScannerScreen() {
                                 status = "Metasploit error: ${error.message}"
                             }
                         )
+                        isScanning = false
                     }
                 },
                 modifier = Modifier.weight(1f),
