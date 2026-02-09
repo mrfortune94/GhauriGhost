@@ -26,15 +26,21 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    
+    companion object {
+        private const val VPN_REQUEST_CODE = 100
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Prompt for VPN permission & start Tor routing
-        val intent = VpnService.prepare(this)
-        if (intent != null) {
-            startActivityForResult(intent, 0)
+        val vpnPrepareIntent = VpnService.prepare(this)
+        if (vpnPrepareIntent != null) {
+            @Suppress("DEPRECATION")
+            startActivityForResult(vpnPrepareIntent, VPN_REQUEST_CODE)
         } else {
-            startService(Intent(this, TorVpnService::class.java))
+            startVpnService()
         }
 
         setContent {
@@ -54,6 +60,26 @@ class MainActivity : ComponentActivity() {
                     MainScreen()
                 }
             }
+        }
+    }
+    
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
+            startVpnService()
+        }
+    }
+    
+    private fun startVpnService() {
+        val serviceIntent = Intent(this, TorVpnService::class.java).apply {
+            action = TorVpnService.ACTION_START
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 }
@@ -264,7 +290,16 @@ fun EndpointScannerScreen() {
                         selectedEndpoints = if (ep in selectedEndpoints) 
                             selectedEndpoints - ep else selectedEndpoints + ep
                     },
-                    onTest = { GhauriRunner.runOnEndpoint(ep) }
+                    onTest = { 
+                        scope.launch {
+                            status = "Testing endpoint: $ep"
+                            val result = GhauriRunner.runOnEndpoint(ep)
+                            result.fold(
+                                onSuccess = { status = "Test completed: ${it.take(100)}..." },
+                                onFailure = { status = "Test failed: ${it.message}" }
+                            )
+                        }
+                    }
                 )
             }
         }
@@ -278,11 +313,16 @@ fun EndpointScannerScreen() {
         ) {
             Button(
                 onClick = {
-                    val toTest = if (selectedEndpoints.isNotEmpty()) selectedEndpoints.toList() else endpoints
-                    GhauriRunner.runOnEndpoints(toTest)
+                    scope.launch {
+                        val toTest = if (selectedEndpoints.isNotEmpty()) selectedEndpoints.toList() else endpoints
+                        status = "Running SQL injection tests on ${toTest.size} endpoint(s)..."
+                        val results = GhauriRunner.runOnEndpoints(toTest)
+                        val successCount = results.count { it.isSuccess }
+                        status = "Completed: $successCount/${results.size} scans successful"
+                    }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = endpoints.isNotEmpty()
+                enabled = endpoints.isNotEmpty() && !isScanning
             ) {
                 Icon(Icons.Default.BugReport, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
@@ -292,11 +332,20 @@ fun EndpointScannerScreen() {
             Button(
                 onClick = {
                     scope.launch {
-                        MetasploitRunner.autoExploit(url)
+                        status = "Running Metasploit auto-exploit..."
+                        val result = MetasploitRunner.autoExploit(url)
+                        result.fold(
+                            onSuccess = { results -> 
+                                status = "Metasploit scan completed: ${results.size} modules run"
+                            },
+                            onFailure = { error ->
+                                status = "Metasploit error: ${error.message}"
+                            }
+                        )
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = endpoints.isNotEmpty(),
+                enabled = endpoints.isNotEmpty() && !isScanning,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFFF))
             ) {
                 Icon(Icons.Default.Terminal, contentDescription = null)

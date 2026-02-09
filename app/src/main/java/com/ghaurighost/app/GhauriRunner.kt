@@ -10,23 +10,61 @@ import kotlinx.coroutines.withContext
  */
 object GhauriRunner {
     
+    // Callback interface for scan progress updates
+    private var scanProgressCallback: ((String) -> Unit)? = null
+    
+    /**
+     * Set callback for receiving scan progress updates.
+     */
+    fun setProgressCallback(callback: ((String) -> Unit)?) {
+        scanProgressCallback = callback
+    }
+    
     /**
      * Run Ghauri on multiple endpoints with default options.
+     * Returns a list of scan results for each endpoint.
      */
-    fun runOnEndpoints(endpoints: List<String>) {
+    suspend fun runOnEndpoints(endpoints: List<String>): List<Result<String>> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<Result<String>>()
         val py = Python.getInstance()
-        val module = py.getModule("ghauri") // assumes ghauri in assets or pip
+        val module = py.getModule("ghauri")
+        
         endpoints.forEach { url ->
-            val result = module.callAttr("main", arrayOf("--url", url, "--batch", "--level=3"))
-            // TODO: show result in UI
+            try {
+                scanProgressCallback?.invoke("[*] Scanning endpoint: $url")
+                val result = module.callAttr("main", arrayOf("--url", url, "--batch", "--level=3"))
+                val output = result?.toString() ?: "Scan completed for $url"
+                scanProgressCallback?.invoke(output)
+                results.add(Result.success(output))
+            } catch (e: Exception) {
+                val error = "[-] Error scanning $url: ${e.message}"
+                scanProgressCallback?.invoke(error)
+                results.add(Result.failure(e))
+            }
         }
+        
+        results
     }
 
     /**
      * Run Ghauri on a single endpoint with default options.
+     * Returns the scan result.
      */
-    fun runOnEndpoint(url: String) {
-        runOnEndpoints(listOf(url))
+    suspend fun runOnEndpoint(url: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val py = Python.getInstance()
+            val module = py.getModule("ghauri")
+            
+            scanProgressCallback?.invoke("[*] Starting SQL injection scan on: $url")
+            val result = module.callAttr("main", arrayOf("--url", url, "--batch", "--level=3"))
+            val output = result?.toString() ?: "Scan completed"
+            scanProgressCallback?.invoke(output)
+            Result.success(output)
+        } catch (e: Exception) {
+            val error = "[-] Scan failed: ${e.message}"
+            scanProgressCallback?.invoke(error)
+            Result.failure(e)
+        }
     }
     
     /**
