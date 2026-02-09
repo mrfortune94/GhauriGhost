@@ -231,11 +231,20 @@ class TorVpnService : VpnService() {
             if (!existingConnection.socket.isClosed) {
                 try {
                     // Extract TCP payload from packet and forward it
+                    // Validate packet has enough data for header parsing
+                    if (packetData.size < 20) return // Minimum IP header size
+                    
                     val ipHeaderLength = (packetData[0].toInt() and 0x0F) * 4
-                    val tcpHeaderLength = ((packetData[ipHeaderLength + 12].toInt() and 0xF0) shr 4) * 4
+                    if (ipHeaderLength < 20 || ipHeaderLength > packetData.size) return
+                    
+                    // Check we have enough data for TCP header offset field
+                    val tcpHeaderOffsetIndex = ipHeaderLength + 12
+                    if (tcpHeaderOffsetIndex >= packetData.size) return
+                    
+                    val tcpHeaderLength = ((packetData[tcpHeaderOffsetIndex].toInt() and 0xF0) shr 4) * 4
                     val payloadOffset = ipHeaderLength + tcpHeaderLength
                     
-                    if (payloadOffset < packetData.size) {
+                    if (payloadOffset <= packetData.size) {
                         val payload = packetData.copyOfRange(payloadOffset, packetData.size)
                         if (payload.isNotEmpty()) {
                             existingConnection.output.write(payload)
@@ -360,8 +369,15 @@ class TorVpnService : VpnService() {
     
     private fun handleUdpPacket(packet: ByteBuffer, outputStream: FileOutputStream) {
         // Parse UDP packet to extract DNS queries
+        // Reset position to ensure we read from the beginning
+        packet.position(0)
+        
+        if (packet.remaining() < 28) {
+            return // Minimum size: 20 byte IP header + 8 byte UDP header
+        }
+        
         val headerLength = (packet.get(0).toInt() and 0x0F) * 4
-        if (packet.remaining() < headerLength + 8) {
+        if (headerLength < 20 || packet.remaining() < headerLength + 8) {
             return // Invalid UDP packet
         }
         
@@ -545,8 +561,8 @@ class TorVpnService : VpnService() {
     }
     
     private fun cleanup() {
-        // Close all active connections
-        activeConnections.keys.forEach { key ->
+        // Close all active connections - use toList() to avoid ConcurrentModificationException
+        activeConnections.keys.toList().forEach { key ->
             closeConnection(key)
         }
         activeConnections.clear()
